@@ -734,6 +734,14 @@ textarea {
   border-left-color: var(--primary);
 }
 
+}
+
+.stock-card {
+  grid-template-columns: auto 1fr auto auto;
+  align-items: center;
+  border-left-color: var(--primary);
+}
+
 .rank {
   display: grid;
   width: 2.5rem;

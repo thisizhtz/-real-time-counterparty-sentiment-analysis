@@ -209,10 +209,6 @@ const trendChart = document.querySelector("#trend-chart");
 const topCounterparties = document.querySelector("#top-counterparties");
 const riskBreakdown = document.querySelector("#risk-breakdown");
 const eventTimeline = document.querySelector("#event-timeline");
-const forwardReturnTable = document.querySelector("#forward-return-table");
-const strategyMetrics = document.querySelector("#strategy-metrics");
-const returnScatter = document.querySelector("#return-scatter");
-const topNewsEvents = document.querySelector("#top-news-events");
 const pageTrack = document.querySelector("#page-track");
 const pageIndicator = document.querySelector("#page-indicator");
 const liveNewsList = document.querySelector("#live-news-list");
@@ -318,24 +314,8 @@ function analyzeEvent(event) {
     dimensionScores,
     severity,
     model: "FinTransformer-Sim v2",
-    extractedEvents: extractFinancialEvents(event.text || "", riskFlags, severity),
     explanation: buildExplanation(matchedPositiveTerms, matchedNegativeTerms, dimensionScores, riskFlags, transformerContextBoost),
   };
-}
-
-function extractFinancialEvents(text, riskFlags, severity) {
-  const patterns = [
-    ["upgrade", /upgrade|upgraded|评级上调/i],
-    ["downgrade", /downgrade|下调评级/i],
-    ["default_warning", /default|missed payment|违约/i],
-    ["liquidity_stress", /liquidity squeeze|funding pressure|流动性压力/i],
-    ["fraud_loss_exposure", /fraud|欺诈/i],
-    ["sanctions_exposure", /sanction|制裁/i],
-    ["systemic_risk_warning", /systemic financial risks|systemic risk|系统性风险/i],
-  ];
-  return patterns
-    .filter(([, pattern]) => pattern.test(text))
-    .map(([eventType]) => ({ event_type: eventType, severity, flags: riskFlags.slice(0, 3) }));
 }
 
 function inferTransformerContext(text) {
@@ -523,72 +503,6 @@ function renderEventTimeline(results) {
   eventTimeline.innerHTML = rows.length
     ? rows.map((result) => `<div class="timeline-item"><b class="severity-dot ${result.severity}"></b><span>${escapeHtml(result.event.counterparty)}</span><small>${escapeHtml(result.event.event_id || result.event.source || "event")}</small></div>`).join("")
     : '<p class="placeholder">暂无事件</p>';
-}
-
-function attachSimulatedReturns(results) {
-  return results.map((result, index) => {
-    const futureReturn = Number((0.018 * result.score + 0.006 * Math.sin(index + 1) - (result.severity === "high" ? 0.012 : 0)).toFixed(4));
-    return {
-      ...result,
-      returns: {
-        forward_return_1d: futureReturn,
-        forward_return_3d: Number((futureReturn * 1.45).toFixed(4)),
-        forward_return_5d: Number((futureReturn * 1.9).toFixed(4)),
-        forward_return_10d: Number((futureReturn * 2.35).toFixed(4)),
-        abnormal_return: Number((futureReturn - 0.0015).toFixed(4)),
-      },
-      signal: result.score > 0.15 ? 1 : result.score < -0.15 ? -1 : 0,
-    };
-  });
-}
-
-function renderForwardReturnTable(rows) {
-  const selected = rows.slice(0, 4);
-  forwardReturnTable.innerHTML = selected.length
-    ? selected.map((row) => `<div class="mini-row"><span>${escapeHtml(row.event.counterparty)}</span><strong>${formatPercent(row.returns.forward_return_5d)}</strong><small>5d fwd</small></div>`).join("")
-    : '<p class="placeholder">暂无收益归因</p>';
-}
-
-function renderStrategyMetrics(rows) {
-  const active = rows.filter((row) => row.signal !== 0);
-  const strategyReturns = active.map((row) => row.signal * row.returns.forward_return_1d);
-  const cumulative = strategyReturns.reduce((value, item) => value * (1 + item), 1) - 1;
-  const wins = strategyReturns.filter((item) => item > 0).length;
-  const mean = strategyReturns.length ? strategyReturns.reduce((total, item) => total + item, 0) / strategyReturns.length : 0;
-  const variance = strategyReturns.length ? strategyReturns.reduce((total, item) => total + (item - mean) ** 2, 0) / strategyReturns.length : 0;
-  const sharpe = variance > 0 ? (mean / Math.sqrt(variance)) * Math.sqrt(252) : 0;
-  strategyMetrics.innerHTML = rows.length
-    ? `
-      <div class="mini-row"><span>累计策略收益</span><strong>${formatPercent(cumulative)}</strong></div>
-      <div class="mini-row"><span>Hit Rate</span><strong>${active.length ? formatPercent(wins / active.length) : "0.0%"}</strong></div>
-      <div class="mini-row"><span>Sharpe</span><strong>${sharpe.toFixed(2)}</strong></div>
-    `
-    : '<p class="placeholder">暂无回测指标</p>';
-}
-
-function renderReturnScatter(rows) {
-  if (!rows.length) {
-    returnScatter.innerHTML = '<p class="placeholder">暂无散点数据</p>';
-    return;
-  }
-  const points = rows.map((row) => {
-    const x = 50 + row.score * 42;
-    const y = 50 - row.returns.forward_return_5d * 900;
-    return `<circle cx="${Math.max(5, Math.min(95, x)).toFixed(1)}" cy="${Math.max(5, Math.min(95, y)).toFixed(1)}" r="3" class="${row.label}"></circle>`;
-  });
-  returnScatter.innerHTML = `<svg viewBox="0 0 100 100" role="img" aria-label="sentiment score versus future return"><line x1="0" y1="50" x2="100" y2="50"></line><line x1="50" y1="0" x2="50" y2="100"></line>${points.join("")}</svg>`;
-}
-
-function renderTopNewsEvents(rows) {
-  const topPositive = [...rows].sort((a, b) => b.score - a.score)[0];
-  const topNegative = [...rows].sort((a, b) => a.score - b.score)[0];
-  topNewsEvents.innerHTML = rows.length
-    ? [topPositive, topNegative].filter(Boolean).map((row) => `<div class="mini-row"><span>${escapeHtml(row.event.counterparty)}</span><strong>${row.score.toFixed(2)}</strong><small>${row.label}</small></div>`).join("")
-    : '<p class="placeholder">暂无新闻排行</p>';
-}
-
-function formatPercent(value) {
-  return `${(value * 100).toFixed(1)}%`;
 }
 
 function renderResultCard(result) {
