@@ -1,17 +1,22 @@
 # Real-Time Counterparty Sentiment Analysis
 
-A lightweight Python toolkit and complete static webpage for scoring streaming text about counterparties and surfacing early warning signals such as payment stress, default risk, sanctions exposure, and conduct risk.
+A complete static webpage and lightweight Python toolkit for turning streaming counterparty text into explainable sentiment scores, early-warning risk flags, and rolling monitoring snapshots.
 
-The project is intentionally dependency-light: the baseline analyzer uses an auditable finance-oriented lexicon so teams can run it in restricted environments, understand every score, and later swap in a model-backed analyzer if needed.
+The repository is designed to be useful in two modes:
+
+1. **Webpage-first demo**: open a polished Chinese landing page with an interactive JSONL analyzer that runs fully in the browser.
+2. **Python toolkit**: install the package locally and process JSONL events through the CLI or the `counterparty_sentiment` Python API.
+
+The baseline analyzer is intentionally dependency-light and auditable. It uses finance-oriented lexicons, deterministic scoring, and transparent matched-term output so risk teams can understand every score before replacing or augmenting it with a model-backed analyzer.
 
 ## What is included
 
+- **Complete static webpage** with hero, overview, online demo, workflow, deployment guidance, responsive styling, and browser-side JSONL analysis.
 - **Event model** for normalized counterparty text observations.
 - **Sentiment analyzer** with positive, negative, and risk lexicons tuned for financial counterparty monitoring.
-- **Streaming state manager** with rolling per-counterparty windows.
+- **Streaming state manager** with bounded rolling per-counterparty windows.
 - **JSONL CLI** for local files, pipes, or message-bus consumers that can emit newline-delimited JSON.
-- **Complete static webpage** with an interactive browser-side JSONL demo.
-- **Tests and examples** to validate the baseline behavior.
+- **Tests, examples, and CI** to validate analyzer behavior, CLI output, static assets, and frontend analysis logic.
 
 ## Webpage demo
 
@@ -21,7 +26,15 @@ Open `index.html` directly in a browser, or serve the repository root locally:
 python -m http.server 8000
 ```
 
-Then visit `http://localhost:8000/` to use the complete interactive webpage.
+Then visit `http://localhost:8000/` to use the full interactive webpage.
+
+The webpage lets you:
+
+- paste or edit newline-delimited JSON events;
+- restore a built-in sample event stream;
+- analyze events locally in the browser without uploading text;
+- view event-level labels, scores, confidence values, matched terms, and risk flags;
+- view summary metrics for event count, counterparties, negative events, and average score.
 
 ## Python quick start
 
@@ -81,6 +94,20 @@ print(result.label, result.score)
 print(stream.snapshot("Northwind Capital"))
 ```
 
+## Project structure
+
+```text
+.
+├── index.html                  # Complete static webpage
+├── web/
+│   ├── app.js                  # Browser-side JSONL sentiment demo
+│   └── styles.css              # Responsive webpage styling
+├── src/counterparty_sentiment/ # Python package
+├── examples/events.jsonl       # Sample input stream
+├── tests/                      # Python and static-site tests
+└── docs/architecture.md        # Processing architecture notes
+```
+
 ## Development
 
 Run the tests with:
@@ -89,7 +116,12 @@ Run the tests with:
 python -m pytest
 ```
 
-If `pytest` is not installed, the test suite can also be executed with the standard-library runner after installing the package in editable mode and adapting tests to `unittest`; `pytest` is recommended for day-to-day development.
+Additional checks used for this project:
+
+```bash
+node --check web/app.js
+python -m compileall src tests
+```
 
 ## Roadmap
 
