@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="实时交易对手方情绪分析网页，展示风险信号、滚动快照、分析流程与可交互 JSONL 演示。"
+    />
+    <title>实时交易对手方情绪分析</title>
+    <link rel="stylesheet" href="web/styles.css" />
+  </head>
+  <body>
+    <header class="site-header" aria-label="主导航">
+      <a class="brand" href="#top" aria-label="返回首页">
+        <span class="brand-mark">RT</span>
+        <span>Counterparty Sentiment</span>
+      </a>
+      <nav class="nav-links" aria-label="页面章节">
+        <a href="#overview">概览</a>
+        <a href="#demo">在线演示</a>
+        <a href="#workflow">流程</a>
+        <a href="#deployment">落地</a>
+      </nav>
+    </header>
+
+    <main id="top">
+      <section class="hero section-shell" aria-labelledby="hero-title">
+        <div class="hero-copy">
+          <p class="eyebrow">Real-Time Counterparty Sentiment Analysis</p>
+          <h1 id="hero-title">把新闻、公告与业务文本转化为可解释的交易对手方风险信号</h1>
+          <p class="hero-subtitle">
+            一个完整的网页化演示：输入 JSONL 事件，即时获得情绪分数、风险标签、命中词与滚动快照，帮助风控团队更早识别付款压力、违约、制裁、欺诈与偿付风险。
+          </p>
+          <div class="hero-actions">
+            <a class="button button-primary" href="#demo">立即体验</a>
+            <a class="button button-secondary" href="docs/architecture.md">查看架构文档</a>
+          </div>
+        </div>
+        <aside class="hero-card" aria-label="当前风险看板摘要">
+          <div class="status-pill"><span class="pulse"></span>Live monitoring ready</div>
+          <dl class="metric-grid">
+            <div>
+              <dt>延迟目标</dt>
+              <dd>&lt; 1s</dd>
+            </div>
+            <div>
+              <dt>风险类别</dt>
+              <dd>7+</dd>
+            </div>
+            <div>
+              <dt>输出格式</dt>
+              <dd>JSON</dd>
+            </div>
+            <div>
+              <dt>依赖</dt>
+              <dd>轻量</dd>
+            </div>
+          </dl>
+        </aside>
+      </section>
+
+      <section id="overview" class="section-shell feature-section" aria-labelledby="overview-title">
+        <div class="section-heading">
+          <p class="eyebrow">Overview</p>
+          <h2 id="overview-title">从文本流到风控动作的一体化页面</h2>
+          <p>页面把项目能力组织成风控人员更易理解的形态，同时保留底层 Python 包、CLI 与 JSONL 事件模型，便于后续接入真实流式数据。</p>
+        </div>
+        <div class="feature-grid">
+          <article class="feature-card">
+            <span class="icon">01</span>
+            <h3>可解释评分</h3>
+            <p>基于金融风险词典输出 positive、neutral、negative 标签，并展示命中正负面词，便于审计与模型风险管理。</p>
+          </article>
+          <article class="feature-card">
+            <span class="icon">02</span>
+            <h3>风险早预警</h3>
+            <p>将 default、missed payment、sanction、fraud 等文本信号映射为标准化风险标签。</p>
+          </article>
+          <article class="feature-card">
+            <span class="icon">03</span>
+            <h3>滚动快照</h3>
+            <p>按交易对手方维护窗口内平均分、最新标签和累计风险旗标，形成实时监控视图。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="demo" class="section-shell demo-section" aria-labelledby="demo-title">
+        <div class="section-heading">
+          <p class="eyebrow">Interactive demo</p>
+          <h2 id="demo-title">在线 JSONL 分析演示</h2>
+          <p>粘贴或编辑多行 JSON，每行至少包含 <code>counterparty</code> 和 <code>text</code>。点击分析后，网页会在浏览器内生成事件级结果和交易对手方聚合看板。</p>
+        </div>
+        <div class="demo-layout">
+          <div class="panel input-panel">
+            <div class="panel-header">
+              <h3>输入事件</h3>
+              <button class="text-button" id="load-sample" type="button">恢复示例</button>
+            </div>
+            <label class="sr-only" for="event-input">JSONL 事件输入</label>
+            <textarea id="event-input" spellcheck="false"></textarea>
+            <div class="demo-actions">
+              <button class="button button-primary" id="analyze-button" type="button">分析事件</button>
+              <button class="button button-secondary" id="clear-button" type="button">清空结果</button>
+            </div>
+            <p class="hint">所有计算都在本地浏览器完成，不上传任何文本。</p>
+          </div>
+
+          <div class="panel output-panel" aria-live="polite">
+            <div class="panel-header">
+              <h3>实时结果</h3>
+              <span id="result-count" class="count-badge">0 events</span>
+            </div>
+            <div id="summary-cards" class="summary-cards"></div>
+            <div id="result-list" class="result-list empty-state">
+              <p>点击“分析事件”后将在这里显示情绪分数、标签、命中词与风险旗标。</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="workflow" class="section-shell workflow-section" aria-labelledby="workflow-title">
+        <div class="section-heading">
+          <p class="eyebrow">Workflow</p>
+          <h2 id="workflow-title">推荐的实时处理链路</h2>
+        </div>
+        <ol class="timeline">
+          <li>
+            <span>1</span>
+            <div>
+              <h3>采集</h3>
+              <p>从新闻、公告、邮件、工单或聊天系统收集文本，统一转成 JSONL 或消息队列事件。</p>
+            </div>
+          </li>
+          <li>
+            <span>2</span>
+            <div>
+              <h3>标准化</h3>
+              <p>使用 TextEvent 规范 counterparty、source、timestamp、event_id 与 text 字段。</p>
+            </div>
+          </li>
+          <li>
+            <span>3</span>
+            <div>
+              <h3>评分与解释</h3>
+              <p>执行词典评分、否定词修正、风险标签映射，并保留命中词作为解释证据。</p>
+            </div>
+          </li>
+          <li>
+            <span>4</span>
+            <div>
+              <h3>监控与处置</h3>
+              <p>将滚动快照推送到仪表盘、预警队列或风控工作流，优先处理负面趋势和高风险旗标。</p>
+            </div>
+          </li>
+        </ol>
+      </section>
+
+      <section id="deployment" class="section-shell deployment-section" aria-labelledby="deployment-title">
+        <div>
+          <p class="eyebrow">Deployment</p>
+          <h2 id="deployment-title">从演示页面到生产系统</h2>
+          <p>
+            当前页面适合演示与需求对齐；生产部署时可以复用 Python 包中的分析器和流式状态管理，并把网页输出替换为消息总线、数据库、BI 看板或告警系统。
+          </p>
+        </div>
+        <div class="deployment-card">
+          <h3>下一步建议</h3>
+          <ul>
+            <li>将词典外置为经过审批的 JSON/YAML 配置。</li>
+            <li>接入 Kafka、SQS、Pub/Sub 或内部事件总线。</li>
+            <li>为不同来源设置阈值、权重与人工复核策略。</li>
+            <li>增加历史回测、漂移监控和审计日志。</li>
+          </ul>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>© 2026 Real-Time Counterparty Sentiment Analysis · MIT License</p>
+      <a href="README.md">README</a>
+    </footer>
+
+    <script src="web/app.js" defer></script>
+  </body>
+</html>
