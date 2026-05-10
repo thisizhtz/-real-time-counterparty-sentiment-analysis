@@ -112,7 +112,13 @@ print(stream.snapshot("Northwind Capital"))
 ├── src/counterparty_sentiment/ # Python package
 │   ├── lexicons.py             # Weighted risk lexicons and source reliability
 │   ├── extraction.py           # Structured financial event extraction
-│   └── ml.py                   # Optional FinBERT/transformer adapter
+│   ├── ml.py                   # Optional FinBERT/transformer adapter
+│   ├── ingestion.py            # Local JSONL, RSS, and Yahoo news normalization
+│   ├── entity_linking.py       # Auditable company-name-to-ticker mapper
+│   ├── market_data.py          # Optional yfinance OHLCV download helpers
+│   ├── returns.py              # Forward and abnormal return attribution
+│   └── backtest.py             # Signal generation and research metrics
+├── scripts/fetch_news.py       # Standalone news ingestion script
 ├── examples/events.jsonl       # Sample input stream
 ├── tests/                      # Python and static-site tests
 └── docs/architecture.md        # Processing architecture notes

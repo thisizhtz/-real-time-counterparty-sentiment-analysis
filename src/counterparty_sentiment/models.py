@@ -18,6 +18,8 @@ class TextEvent:
     source: str = "unknown"
     event_id: str | None = None
     timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    ticker: str | None = None
+    headline: str | None = None
 
     @classmethod
     def from_mapping(cls, payload: dict[str, Any]) -> "TextEvent":
@@ -36,6 +38,8 @@ class TextEvent:
             source=str(payload.get("source", "unknown")).strip() or "unknown",
             event_id=str(payload["event_id"]) if payload.get("event_id") is not None else None,
             timestamp=timestamp,
+            ticker=str(payload["ticker"]).strip().upper() if payload.get("ticker") else None,
+            headline=str(payload["headline"]).strip() if payload.get("headline") else None,
         )
 
 

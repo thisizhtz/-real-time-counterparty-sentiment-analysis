@@ -438,10 +438,15 @@ function renderSummary(results) {
 }
 
 function renderDashboard(results) {
+  const researchRows = attachSimulatedReturns(results);
   renderTrendChart(results);
   renderTopCounterparties(results);
   renderRiskBreakdown(results);
   renderEventTimeline(results);
+  renderForwardReturnTable(researchRows);
+  renderStrategyMetrics(researchRows);
+  renderReturnScatter(researchRows);
+  renderTopNewsEvents(researchRows);
 }
 
 function renderTrendChart(results) {
@@ -509,6 +514,9 @@ function renderResultCard(result) {
   const dimensions = Object.entries(result.dimensionScores)
     .map(([dimension, score]) => renderDimensionBar(dimension, score))
     .join("");
+  const extracted = result.extractedEvents.length
+    ? `<div class="event-chip-row">${result.extractedEvents.map((item) => `<span>${escapeHtml(item.event_type)}</span>`).join("")}</div>`
+    : "";
 
   return `
     <article class="result-card severity-${result.severity}">
@@ -521,6 +529,7 @@ function renderResultCard(result) {
       </header>
       <p class="result-text">${escapeHtml(result.event.text)}</p>
       <p class="explanation">${escapeHtml(result.explanation)}</p>
+      ${extracted}
       <div class="dimension-grid">${dimensions}</div>
       <div class="chip-row">${chips || '<span class="term-chip">no matched terms</span>'}</div>
     </article>
