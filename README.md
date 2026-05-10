@@ -1,17 +1,17 @@
 # Real-Time Counterparty Sentiment Analysis
 
-A complete static webpage and lightweight Python toolkit for turning streaming counterparty text into explainable sentiment scores, multi-dimensional risk scores, early-warning risk flags, and rolling monitoring snapshots.
+A complete static webpage and lightweight Python toolkit for turning streaming counterparty text into explainable sentiment scores, multi-dimensional risk scores, early-warning risk flags, rolling monitoring snapshots, live-news style sentiment views, and research-oriented stock-pick queues.
 
 The repository is designed to be useful in two modes:
 
-1. **Webpage-first demo**: open a polished Chinese landing page with an interactive JSONL analyzer that runs fully in the browser.
+1. **Webpage-first demo**: open a polished Chinese horizontal dashboard with natural-language input, FinTransformer-style scoring, a simulated live-news sentiment radar, and a stock-pick page that runs fully in the browser.
 2. **Python toolkit**: install the package locally and process JSONL events through the CLI or the `counterparty_sentiment` Python API.
 
 The baseline analyzer is intentionally dependency-light and auditable. It uses finance-oriented lexicons, deterministic scoring, intensity/negation handling, multi-dimensional risk scoring, and transparent matched-term output so risk teams can understand every score before replacing or augmenting it with a model-backed analyzer.
 
 ## What is included
 
-- **Complete static webpage** with a clean bright UI, hero, overview, online demo, workflow, deployment guidance, responsive styling, and browser-side JSONL analysis.
+- **Complete static webpage** with a clean bright horizontal UI, FinTransformer model positioning, natural-language analysis, simulated live-news sentiment radar, stock-pick queue, deployment guidance, responsive styling, and browser-side analysis.
 - **Event model** for normalized counterparty text observations.
 - **Institutional-style risk engine** with weighted financial risk lexicons, context suppression, source reliability, recency weighting, event extraction, optional ML hooks, and category scores for credit, conduct, liquidity, systemic, sanctions, market, and resilience signals.
 - **Streaming state manager** with bounded rolling per-counterparty windows.
@@ -30,11 +30,12 @@ Then visit `http://localhost:8000/` to use the full interactive webpage.
 
 The webpage lets you:
 
-- paste or edit newline-delimited JSON events;
-- restore a built-in sample event stream;
+- switch horizontally between overview, smart recognition, live news, stock picks, and deployment pages;
+- paste natural-language Chinese or English news, filings, notes, chats, or legacy newline-delimited JSON events;
+- restore a built-in natural-language sample event stream;
 - analyze events locally in the browser without uploading text;
-- view event-level labels, scores, confidence values, severity, matched terms, explanations, and risk flags;
-- view summary metrics, rolling trend chart, top counterparties by risk, category breakdown, event timeline, high-risk events, and systemic-risk average.
+- view event-level labels, scores, confidence values, severity, matched terms, explanations, model names, and risk flags;
+- view summary metrics, rolling trend chart, top counterparties by risk, category breakdown, event timeline, simulated live-news sentiment radar, and stock-pick candidates.
 
 ## Python quick start
 
@@ -106,7 +107,7 @@ print(stream.snapshot("Northwind Capital"))
 .
 ├── index.html                  # Complete static webpage
 ├── web/
-│   ├── app.js                  # Browser-side JSONL sentiment demo
+│   ├── app.js                  # Browser-side NLP, live-news, and stock-pick demo
 │   └── styles.css              # Responsive webpage styling
 ├── src/counterparty_sentiment/ # Python package
 │   ├── lexicons.py             # Weighted risk lexicons and source reliability
