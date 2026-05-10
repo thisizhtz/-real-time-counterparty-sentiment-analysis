@@ -108,14 +108,6 @@ print(stream.snapshot("Northwind Capital"))
 └── docs/architecture.md        # Processing architecture notes
 ```
 
-## Development
-
-Run the tests with:
-
-```bash
-python -m pytest
-```
-
 Additional checks used for this project:
 
 ```bash
