@@ -22,6 +22,11 @@ classifiers = [
   "Topic :: Office/Business :: Financial",
 ]
 
+[project.optional-dependencies]
+market-data = ["yfinance>=0.2"]
+ml = ["transformers>=4.30"]
+research = ["yfinance>=0.2", "transformers>=4.30"]
+
 [project.scripts]
 counterparty-sentiment = "counterparty_sentiment.cli:main"
 
