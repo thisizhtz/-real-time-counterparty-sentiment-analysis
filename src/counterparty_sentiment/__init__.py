@@ -1,7 +1,8 @@
 """Streaming counterparty sentiment analysis utilities."""
 
 from .analyzer import SentimentAnalyzer
+from .extraction import ExtractedFinancialEvent
 from .models import SentimentResult, TextEvent
 from .streaming import SentimentStream
 
-__all__ = ["SentimentAnalyzer", "SentimentResult", "SentimentStream", "TextEvent"]
+__all__ = ["ExtractedFinancialEvent", "SentimentAnalyzer", "SentimentResult", "SentimentStream", "TextEvent"]

@@ -1,4 +1,4 @@
-"""Lexicon-based NLP analyzer tuned for counterparty risk signals."""
+"""Explainable financial NLP analyzer for counterparty risk monitoring."""
 
 from __future__ import annotations
 
@@ -6,143 +6,46 @@ import math
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
+from datetime import datetime, timezone
 
+from .extraction import extract_financial_events
+from .lexicons import (
+    INTENSIFIERS,
+    NEGATIVE_TERMS,
+    NEGATORS,
+    POSITIVE_TERMS,
+    RISK_LEXICON,
+    SOURCE_RELIABILITY,
+    SUPPRESSION_PATTERNS,
+    CATEGORY_ALIASES,
+    TERM_RISK_FLAGS,
+    UNCERTAINTY_TERMS,
+)
+from .ml import MLSentimentModel
 from .models import SentimentResult, TextEvent
 
-DEFAULT_POSITIVE_TERMS = frozenset(
-    {
-        "approved",
-        "beat",
-        "capital raise",
-        "compliant",
-        "confidence",
-        "deleveraging",
-        "improved",
-        "investment grade",
-        "liquidity buffer",
-        "profitable",
-        "recovered",
-        "resolved",
-        "stable",
-        "upgrade",
-        "upgraded",
-        "well capitalized",
-    }
-)
+DEFAULT_POSITIVE_TERMS = POSITIVE_TERMS
+DEFAULT_NEGATIVE_TERMS = NEGATIVE_TERMS
+DIMENSION_LEXICONS = RISK_LEXICON
+DEFAULT_RISK_TERMS = TERM_RISK_FLAGS
 
-DEFAULT_NEGATIVE_TERMS = frozenset(
-    {
-        "amplify",
-        "bankruptcy",
-        "breach",
-        "contagion",
-        "default",
-        "downgrade",
-        "distress",
-        "fraud",
-        "growing links",
-        "illiquid",
-        "insolvent",
-        "lawsuit",
-        "loss",
-        "missed payment",
-        "negative outlook",
-        "probe",
-        "restructuring",
-        "risk",
-        "risks",
-        "sanction",
-        "stress",
-        "systemic financial risks",
-        "volatile",
-        "warned",
-    }
-)
-
-DEFAULT_RISK_TERMS = {
-    "amplify systemic financial risks": "systemic_risk_amplification",
-    "systemic financial risks": "systemic_risk",
-    "systemic risk": "systemic_risk",
-    "growing links": "interconnectedness_risk",
-    "private credit": "private_credit_exposure",
-    "banks and private credit": "bank_private_credit_linkage",
-    "contagion": "contagion_risk",
-    "default": "credit_default",
-    "missed payment": "payment_stress",
-    "sanction": "sanctions_exposure",
-    "fraud": "conduct_risk",
-    "bankruptcy": "bankruptcy_risk",
-    "insolvent": "solvency_risk",
-    "breach": "contract_breach",
-}
-
-DIMENSION_LEXICONS = {
-    "credit": {
-        "default": 1.0,
-        "missed payment": 1.0,
-        "downgrade": 0.7,
-        "negative outlook": 0.6,
-        "restructuring": 0.8,
-        "distress": 0.7,
-        "loss": 0.45,
-    },
-    "liquidity": {
-        "illiquid": 1.0,
-        "liquidity squeeze": 0.9,
-        "funding pressure": 0.85,
-        "withdrawal": 0.65,
-        "liquidity buffer": -0.65,
-    },
-    "systemic": {
-        "systemic financial risks": 1.0,
-        "systemic risk": 1.0,
-        "amplify systemic financial risks": 1.2,
-        "contagion": 0.9,
-        "growing links": 0.7,
-        "banks and private credit": 0.85,
-        "private credit": 0.45,
-        "interconnected": 0.7,
-        "financial stability board": 0.55,
-    },
-    "legal_conduct": {
-        "fraud": 1.0,
-        "lawsuit": 0.75,
-        "probe": 0.65,
-        "sanction": 0.95,
-        "breach": 0.75,
-    },
-    "market": {
-        "volatile": 0.7,
-        "selloff": 0.8,
-        "spread widening": 0.85,
-        "drawdown": 0.65,
-        "negative outlook": 0.5,
-    },
-    "resilience": {
-        "well capitalized": -0.9,
-        "investment grade": -0.75,
-        "stable": -0.55,
-        "upgrade": -0.7,
-        "upgraded": -0.7,
-        "resolved": -0.6,
-        "compliant": -0.45,
-    },
-}
-
-_TOKEN_PATTERN = re.compile(r"[a-z][a-z\- ]*[a-z]|[a-z]", re.IGNORECASE)
-_NEGATORS = {"not", "no", "never", "without", "hardly"}
-_INTENSIFIERS = {"amplify", "growing", "material", "significant", "severe", "sharp", "elevated", "warned"}
+_TOKEN_PATTERN = re.compile(r"[a-z][a-z\- ]*[a-z]|[a-z]|\d+(?:\.\d+)?%?", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
-class DimensionMatch:
-    dimension: str
+class TermMatch:
+    """A weighted lexicon match with context-aware adjustment."""
+
+    category: str
     term: str
-    weight: float
+    base_weight: float
+    adjusted_weight: float
+    context: str
+    suppressed: bool = False
 
 
 class SentimentAnalyzer:
-    """Score a text event with a deterministic, auditable finance-oriented NLP lexicon."""
+    """Score text with auditable weighted financial risk lexicons and optional ML blending."""
 
     def __init__(
         self,
@@ -152,59 +55,70 @@ class SentimentAnalyzer:
         dimension_lexicons: dict[str, dict[str, float]] | None = None,
         positive_threshold: float = 0.15,
         negative_threshold: float = -0.15,
+        ml_model: MLSentimentModel | None = None,
+        ml_weight: float = 0.0,
     ) -> None:
         self.positive_terms = tuple(sorted({term.lower() for term in positive_terms}, key=len, reverse=True))
         self.negative_terms = tuple(sorted({term.lower() for term in negative_terms}, key=len, reverse=True))
         self.risk_terms = {term.lower(): flag for term, flag in (risk_terms or DEFAULT_RISK_TERMS).items()}
         self.dimension_lexicons = {
             dimension: {term.lower(): weight for term, weight in terms.items()}
-            for dimension, terms in (dimension_lexicons or DIMENSION_LEXICONS).items()
+            for dimension, terms in (dimension_lexicons or RISK_LEXICON).items()
         }
         self.positive_threshold = positive_threshold
         self.negative_threshold = negative_threshold
+        self.ml_model = ml_model
+        self.ml_weight = max(0.0, min(1.0, ml_weight))
 
     def analyze(self, event: TextEvent) -> SentimentResult:
-        """Analyze one event and return normalized sentiment plus multi-dimensional risk scores."""
+        """Analyze one event and return normalized risk, event extraction, and audit evidence."""
         normalized_text = _normalize(event.text)
-        positive_matches = _find_terms(normalized_text, self.positive_terms)
-        negative_matches = _find_terms(normalized_text, self.negative_terms)
-        dimension_matches = _find_dimension_matches(normalized_text, self.dimension_lexicons)
-        dimension_scores = _dimension_scores(dimension_matches)
+        term_matches = _find_weighted_matches(normalized_text, self.dimension_lexicons)
+        category_scores = _category_scores(term_matches)
+        dimension_scores = {CATEGORY_ALIASES.get(category, category): round(math.tanh(score / 1.5), 4) for category, score in category_scores.items()}
 
-        positive_score = sum(_term_weight(term) for term in positive_matches)
-        negative_score = sum(_term_weight(term) for term in negative_matches)
-        dimension_risk_pressure = sum(max(score, 0.0) for score in dimension_scores.values())
-        dimension_resilience = abs(sum(min(score, 0.0) for score in dimension_scores.values()))
-
-        negation_adjustment = _negation_adjustment(normalized_text, positive_matches, negative_matches)
+        matched_positive_terms = tuple(match.term for match in term_matches if match.adjusted_weight < 0 and not match.suppressed)
+        matched_negative_terms = tuple(match.term for match in term_matches if match.adjusted_weight > 0 and not match.suppressed)
+        raw_pressure = sum(score for category, score in category_scores.items() if category != "resilience" and score > 0)
+        resilience = abs(category_scores.get("resilience", 0.0))
         intensity = _intensity_multiplier(normalized_text)
-        raw_score = (positive_score + 0.65 * dimension_resilience) - (
-            negative_score + 0.75 * dimension_risk_pressure
-        )
-        raw_score = raw_score * intensity + negation_adjustment
-        score = math.tanh(raw_score / 4.0)
-        label = _label(score, self.positive_threshold, self.negative_threshold)
-        confidence = min(
-            1.0,
-            abs(score)
-            + 0.10 * (len(positive_matches) + len(negative_matches))
-            + 0.08 * len(dimension_matches),
-        )
-        risk_flags = _risk_flags(normalized_text, self.risk_terms, dimension_scores)
-        severity = _severity(dimension_scores, score)
-        explanation = _explanation(positive_matches, negative_matches, dimension_scores, risk_flags)
+        uncertainty = _uncertainty_discount(normalized_text)
+        source_reliability = _source_reliability(event.source)
+        recency_weight = _recency_weight(event.timestamp)
+
+        rule_score = math.tanh(((resilience * 0.85) - raw_pressure) * intensity * uncertainty / 3.0)
+        ml_score = None
+        if self.ml_model is not None and self.ml_weight > 0:
+            prediction = self.ml_model.predict(event.text)
+            ml_score = prediction.score
+            rule_score = (1 - self.ml_weight) * rule_score + self.ml_weight * ml_score
+
+        adjusted_score = rule_score * (0.55 + 0.45 * source_reliability) * recency_weight
+        label = _label(adjusted_score, self.positive_threshold, self.negative_threshold)
+        severity_score = _severity_score(category_scores, source_reliability, recency_weight)
+        severity = _severity_label(severity_score)
+        risk_flags = _risk_flags(category_scores, normalized_text, self.risk_terms)
+        extracted_events = extract_financial_events(event.text, category_scores, severity)
+        confidence = _confidence(term_matches, source_reliability, uncertainty, extracted_events)
+        explanation = _explanation(term_matches, dimension_scores, risk_flags, source_reliability, recency_weight)
 
         return SentimentResult(
             event=event,
-            score=round(score, 4),
+            score=round(rule_score, 4),
             label=label,
             confidence=round(confidence, 4),
-            matched_positive_terms=tuple(positive_matches),
-            matched_negative_terms=tuple(negative_matches),
+            matched_positive_terms=matched_positive_terms,
+            matched_negative_terms=matched_negative_terms,
             risk_flags=risk_flags,
-            dimension_scores={dimension: round(value, 4) for dimension, value in dimension_scores.items()},
+            dimension_scores=dimension_scores,
             severity=severity,
             explanation=explanation,
+            extracted_events=extracted_events,
+            category_scores={category: round(score, 4) for category, score in category_scores.items()},
+            source_reliability=round(source_reliability, 4),
+            recency_weight=round(recency_weight, 4),
+            adjusted_score=round(adjusted_score, 4),
+            ml_score=round(ml_score, 4) if ml_score is not None else None,
         )
 
 
@@ -212,90 +126,152 @@ def _normalize(text: str) -> str:
     return " ".join(match.group(0).lower().replace("-", " ") for match in _TOKEN_PATTERN.finditer(text))
 
 
-def _find_terms(text: str, terms: Iterable[str]) -> list[str]:
-    return [term for term in terms if _contains_term(text, term)]
-
-
-def _find_dimension_matches(text: str, dimension_lexicons: dict[str, dict[str, float]]) -> list[DimensionMatch]:
-    matches: list[DimensionMatch] = []
-    for dimension, lexicon in dimension_lexicons.items():
-        for term, weight in sorted(lexicon.items(), key=lambda item: len(item[0]), reverse=True):
-            if _contains_term(text, term):
-                matches.append(DimensionMatch(dimension=dimension, term=term, weight=weight))
+def _find_weighted_matches(text: str, lexicon: dict[str, dict[str, float]]) -> list[TermMatch]:
+    matches: list[TermMatch] = []
+    words = text.split()
+    for category, terms in lexicon.items():
+        category_suppressed = _category_suppressed(text, category)
+        for term, weight in sorted(terms.items(), key=lambda item: len(item[0]), reverse=True):
+            for match in re.finditer(rf"(?<!\w){re.escape(term)}(?!\w)", text):
+                context = _context_window(words, match.start(), text)
+                adjusted_weight = _contextual_weight(weight, context, category_suppressed)
+                matches.append(
+                    TermMatch(
+                        category=category,
+                        term=term,
+                        base_weight=weight,
+                        adjusted_weight=adjusted_weight,
+                        context=context,
+                        suppressed=category_suppressed or abs(adjusted_weight) < abs(weight) * 0.35,
+                    )
+                )
+                break
     return matches
 
 
-def _dimension_scores(matches: list[DimensionMatch]) -> dict[str, float]:
-    scores = {dimension: 0.0 for dimension in DIMENSION_LEXICONS}
+def _category_suppressed(text: str, category: str) -> bool:
+    return any(pattern in text for pattern in SUPPRESSION_PATTERNS.get(category, ()))
+
+
+def _context_window(words: list[str], char_position: int, text: str, radius: int = 5) -> str:
+    prefix = text[:char_position]
+    index = len(prefix.split())
+    start = max(0, index - radius)
+    end = min(len(words), index + radius + 1)
+    return " ".join(words[start:end])
+
+
+def _contextual_weight(weight: float, context: str, category_suppressed: bool) -> float:
+    adjusted = weight
+    suppression = category_suppressed or any(negator in context.split() for negator in NEGATORS)
+    dismissal = "dismissed" in context or "no evidence" in context
+    if suppression and weight > 0:
+        adjusted = -abs(weight) * 0.55
+    elif suppression:
+        adjusted *= 0.5
+    if dismissal and weight > 0:
+        adjusted = min(adjusted, -abs(weight) * 0.45)
+    elif dismissal:
+        adjusted *= 1.2
+    if any(term in context for term in INTENSIFIERS) and adjusted > 0:
+        adjusted *= 1.18
+    if any(term in context for term in UNCERTAINTY_TERMS) and adjusted > 0:
+        adjusted *= 0.72
+    return adjusted
+
+
+def _category_scores(matches: list[TermMatch]) -> dict[str, float]:
+    scores = {category: 0.0 for category in RISK_LEXICON}
     for match in matches:
-        scores.setdefault(match.dimension, 0.0)
-        scores[match.dimension] += match.weight
-    return {dimension: math.tanh(score / 2.0) for dimension, score in scores.items()}
-
-
-def _contains_term(text: str, term: str) -> bool:
-    return re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text) is not None
-
-
-def _term_weight(term: str) -> float:
-    return 1.0 + 0.25 * (len(term.split()) - 1)
+        scores.setdefault(match.category, 0.0)
+        scores[match.category] += match.adjusted_weight
+    return scores
 
 
 def _intensity_multiplier(text: str) -> float:
-    matched_intensifiers = sum(1 for term in _INTENSIFIERS if _contains_term(text, term))
-    return min(1.4, 1.0 + 0.08 * matched_intensifiers)
+    matched_intensifiers = sum(1 for term in INTENSIFIERS if _contains_term(text, term))
+    return min(1.45, 1.0 + 0.08 * matched_intensifiers)
 
 
-def _negation_adjustment(text: str, positive_matches: list[str], negative_matches: list[str]) -> float:
-    words = text.split()
-    adjustment = 0.0
-    for index, word in enumerate(words):
-        if word not in _NEGATORS:
-            continue
-        window = " ".join(words[index + 1 : index + 4])
-        if any(term in window for term in positive_matches):
-            adjustment -= 1.0
-        if any(term in window for term in negative_matches):
-            adjustment += 1.0
-    return adjustment
+def _uncertainty_discount(text: str) -> float:
+    uncertainty_count = sum(1 for term in UNCERTAINTY_TERMS if _contains_term(text, term))
+    return max(0.68, 1.0 - 0.08 * uncertainty_count)
 
 
-def _risk_flags(text: str, risk_terms: dict[str, str], dimension_scores: dict[str, float]) -> tuple[str, ...]:
-    flags = {flag for term, flag in risk_terms.items() if _contains_term(text, term)}
-    flags.update(f"{dimension}_risk" for dimension, score in dimension_scores.items() if score >= 0.45)
-    return tuple(sorted(flags))
+def _source_reliability(source: str) -> float:
+    normalized = source.strip().lower()
+    return SOURCE_RELIABILITY.get(normalized, SOURCE_RELIABILITY.get(normalized.replace("_", " "), 0.65))
 
 
-def _severity(dimension_scores: dict[str, float], score: float) -> str:
-    max_dimension = max((value for value in dimension_scores.values()), default=0.0)
-    if score <= -0.65 or max_dimension >= 0.75:
+def _recency_weight(timestamp: datetime) -> float:
+    event_time = timestamp if timestamp.tzinfo else timestamp.replace(tzinfo=timezone.utc)
+    age_hours = max(0.0, (datetime.now(timezone.utc) - event_time.astimezone(timezone.utc)).total_seconds() / 3600)
+    return max(0.35, math.exp(-age_hours / (24 * 14)))
+
+
+def _severity_score(category_scores: dict[str, float], source_reliability: float, recency_weight: float) -> float:
+    max_risk = max((score for category, score in category_scores.items() if category != "resilience"), default=0.0)
+    aggregate = sum(max(score, 0.0) for category, score in category_scores.items() if category != "resilience")
+    return min(1.0, (0.55 * math.tanh(max_risk) + 0.45 * math.tanh(aggregate / 2.5)) * source_reliability * recency_weight)
+
+
+def _severity_label(severity_score: float) -> str:
+    if severity_score >= 0.62:
         return "high"
-    if score <= -0.35 or max_dimension >= 0.45:
+    if severity_score >= 0.32:
         return "medium"
     return "low"
 
 
+def _confidence(
+    matches: list[TermMatch],
+    source_reliability: float,
+    uncertainty: float,
+    extracted_events: tuple[object, ...],
+) -> float:
+    effective_matches = [match for match in matches if not match.suppressed]
+    evidence_strength = min(1.0, 0.12 * len(effective_matches) + 0.12 * len(extracted_events))
+    suppression_penalty = 0.04 * sum(1 for match in matches if match.suppressed)
+    return max(0.05, min(1.0, 0.28 + evidence_strength + 0.32 * source_reliability + 0.20 * uncertainty - suppression_penalty))
+
+
+def _risk_flags(category_scores: dict[str, float], text: str, risk_terms: dict[str, str]) -> tuple[str, ...]:
+    flags = {category for category, score in category_scores.items() if category != "resilience" and score >= 0.45}
+    flags.update(flag for term, flag in risk_terms.items() if _contains_term(text, term))
+    return tuple(sorted(flags))
+
+
 def _explanation(
-    positive_matches: list[str],
-    negative_matches: list[str],
+    matches: list[TermMatch],
     dimension_scores: dict[str, float],
     risk_flags: tuple[str, ...],
+    source_reliability: float,
+    recency_weight: float,
 ) -> str:
+    active_matches = [match for match in matches if not match.suppressed]
+    suppressed = [match for match in matches if match.suppressed]
+    top_terms = sorted(active_matches, key=lambda match: abs(match.adjusted_weight), reverse=True)[:5]
     top_dimensions = [
         f"{dimension}={score:.2f}"
-        for dimension, score in sorted(dimension_scores.items(), key=lambda item: abs(item[1]), reverse=True)[:3]
+        for dimension, score in sorted(dimension_scores.items(), key=lambda item: abs(item[1]), reverse=True)[:4]
         if abs(score) > 0.05
     ]
     parts = []
-    if negative_matches:
-        parts.append(f"negative terms: {', '.join(negative_matches[:4])}")
-    if positive_matches:
-        parts.append(f"positive terms: {', '.join(positive_matches[:4])}")
+    if top_terms:
+        parts.append("terms: " + ", ".join(f"{match.term}({match.category}:{match.adjusted_weight:.2f})" for match in top_terms))
     if top_dimensions:
-        parts.append(f"dimensions: {', '.join(top_dimensions)}")
+        parts.append("dimensions: " + ", ".join(top_dimensions))
     if risk_flags:
-        parts.append(f"flags: {', '.join(risk_flags[:4])}")
-    return "; ".join(parts) or "no material lexicon signal detected"
+        parts.append("flags: " + ", ".join(risk_flags[:5]))
+    if suppressed:
+        parts.append("suppressed: " + ", ".join(match.term for match in suppressed[:3]))
+    parts.append(f"source={source_reliability:.2f}")
+    parts.append(f"recency={recency_weight:.2f}")
+    return "; ".join(parts) if parts else "no material lexicon signal detected"
+
+
+def _contains_term(text: str, term: str) -> bool:
+    return re.search(rf"(?<!\w){re.escape(term)}(?!\w)", text) is not None
 
 
 def _label(score: float, positive_threshold: float, negative_threshold: float) -> str:

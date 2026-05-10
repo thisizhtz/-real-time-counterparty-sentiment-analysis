@@ -57,3 +57,33 @@ def test_result_serializes_dimension_scores_and_explanation():
     assert "dimension_scores" in payload
     assert payload["severity"] in {"medium", "high"}
     assert payload["explanation"]
+
+
+def test_context_suppresses_denied_fraud_allegations():
+    analyzer = SentimentAnalyzer()
+    result = analyzer.analyze(
+        TextEvent(counterparty="Omega Bank", source="reuters", text="Omega Bank denied fraud allegations and said no evidence of misconduct was found.")
+    )
+
+    assert result.dimension_scores["legal_conduct"] <= 0
+    assert result.severity == "low"
+    assert "suppressed" in result.explanation
+
+
+def test_event_extraction_captures_amount_percentage_and_action():
+    analyzer = SentimentAnalyzer()
+    result = analyzer.analyze(
+        TextEvent(
+            counterparty="HSBC",
+            source="sec filing",
+            text="HSBC disclosed a $400 million fraud loss exposure and a 12% liquidity squeeze after a covenant breach.",
+        )
+    )
+
+    event_types = {event.event_type for event in result.extracted_events}
+    assert "fraud_loss_exposure" in event_types
+    assert "liquidity_stress" in event_types
+    assert "covenant_breach" in event_types
+    assert any(event.amount_usd == 400_000_000 for event in result.extracted_events)
+    assert any(event.percentage == 12 for event in result.extracted_events)
+    assert result.source_reliability == 1.0

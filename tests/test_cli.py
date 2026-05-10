@@ -17,3 +17,5 @@ def test_cli_emits_jsonl_for_file(tmp_path, capsys):
     assert exit_code == 0
     assert output["label"] == "positive"
     assert output["snapshot"]["counterparty"] == "Acme"
+    assert "extracted_events" in output
+    assert "source_reliability" in output

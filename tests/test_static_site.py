@@ -36,7 +36,7 @@ def test_static_webpage_has_required_sections_and_assets():
     parser.feed(Path("index.html").read_text(encoding="utf-8"))
 
     assert "实时交易对手方情绪分析" in "".join(parser.title_parts)
-    assert {"overview", "demo", "workflow", "deployment"}.issubset(parser.ids)
+    assert {"overview", "demo", "workflow", "deployment", "trend-chart", "top-counterparties", "risk-breakdown", "event-timeline", "simulate-button"}.issubset(parser.ids)
     assert parser.stylesheets == ["web/styles.css"]
     assert parser.scripts == ["web/app.js"]
 
@@ -53,5 +53,7 @@ def test_frontend_demo_contains_local_analysis_logic():
     assert "credit_default" in app_js
     assert "systemic financial risks" in app_js
     assert "dimensionScores" in app_js
+    assert "renderTrendChart" in app_js
+    assert "toggleSimulation" in app_js
     assert "color-scheme: light" in Path("web/styles.css").read_text(encoding="utf-8")
     assert "所有计算都在本地浏览器完成" in index_html

@@ -13,7 +13,7 @@ The baseline analyzer is intentionally dependency-light and auditable. It uses f
 
 - **Complete static webpage** with a clean bright UI, hero, overview, online demo, workflow, deployment guidance, responsive styling, and browser-side JSONL analysis.
 - **Event model** for normalized counterparty text observations.
-- **Stronger NLP analyzer** with positive, negative, systemic, credit, liquidity, legal/conduct, market, and resilience lexicons tuned for financial counterparty monitoring.
+- **Institutional-style risk engine** with weighted financial risk lexicons, context suppression, source reliability, recency weighting, event extraction, optional ML hooks, and category scores for credit, conduct, liquidity, systemic, sanctions, market, and resilience signals.
 - **Streaming state manager** with bounded rolling per-counterparty windows.
 - **JSONL CLI** for local files, pipes, or message-bus consumers that can emit newline-delimited JSON.
 - **Tests, examples, and CI** to validate analyzer behavior, CLI output, static assets, and frontend analysis logic.
@@ -34,7 +34,7 @@ The webpage lets you:
 - restore a built-in sample event stream;
 - analyze events locally in the browser without uploading text;
 - view event-level labels, scores, confidence values, severity, matched terms, explanations, and risk flags;
-- view summary metrics for event count, counterparties, high-risk events, negative events, average score, and systemic-risk average.
+- view summary metrics, rolling trend chart, top counterparties by risk, category breakdown, event timeline, high-risk events, and systemic-risk average.
 
 ## Python quick start
 
@@ -74,8 +74,11 @@ The CLI emits one JSON row per input event. Each row includes:
 - `confidence`: simple confidence proxy based on score magnitude and matched terms.
 - `matched_positive_terms` / `matched_negative_terms`: lexicon terms that drove the score.
 - `risk_flags`: normalized early-warning categories.
-- `dimension_scores`: credit, liquidity, systemic, legal/conduct, market, and resilience scores.
+- `dimension_scores`: normalized credit, liquidity, systemic, legal/conduct, sanctions, market, and resilience scores.
+- `category_scores`: raw weighted category evidence before normalization.
 - `severity`: low, medium, or high risk severity.
+- `source_reliability` and `recency_weight`: production-oriented score adjustments.
+- `extracted_events`: structured events such as downgrade, covenant breach, liquidity stress, sanctions exposure, default warning, or fraud loss exposure.
 - `explanation`: short matched-signal explanation for review.
 - `snapshot`: optional rolling counterparty state when `--include-snapshot` is enabled.
 
@@ -106,6 +109,9 @@ print(stream.snapshot("Northwind Capital"))
 │   ├── app.js                  # Browser-side JSONL sentiment demo
 │   └── styles.css              # Responsive webpage styling
 ├── src/counterparty_sentiment/ # Python package
+│   ├── lexicons.py             # Weighted risk lexicons and source reliability
+│   ├── extraction.py           # Structured financial event extraction
+│   └── ml.py                   # Optional FinBERT/transformer adapter
 ├── examples/events.jsonl       # Sample input stream
 ├── tests/                      # Python and static-site tests
 └── docs/architecture.md        # Processing architecture notes

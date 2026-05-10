@@ -12,7 +12,7 @@ from .streaming import SentimentStream
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="Analyze counterparty sentiment from JSONL events.")
+    parser = argparse.ArgumentParser(description="Analyze JSONL counterparty events with explainable financial risk NLP.")
     parser.add_argument(
         "input",
         nargs="?",
@@ -48,7 +48,7 @@ def main(argv: list[str] | None = None) -> int:
                 output = result.to_dict()
                 if args.include_snapshot:
                     snapshot = stream.snapshot(event.counterparty)
-                    output["snapshot"] = snapshot.__dict__ if snapshot else None
+                    output["snapshot"] = snapshot.to_dict() if snapshot else None
                 print(json.dumps(output, ensure_ascii=False, sort_keys=True))
     except (KeyError, ValueError, json.JSONDecodeError) as exc:
         print(f"counterparty-sentiment: invalid input at line {locals().get('line_number', 1)}: {exc}", file=sys.stderr)

@@ -6,6 +6,8 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from .extraction import ExtractedFinancialEvent
+
 
 @dataclass(frozen=True)
 class TextEvent:
@@ -39,7 +41,7 @@ class TextEvent:
 
 @dataclass(frozen=True)
 class SentimentResult:
-    """Normalized sentiment output for a counterparty text event."""
+    """Normalized risk output for a counterparty text event."""
 
     event: TextEvent
     score: float
@@ -51,6 +53,12 @@ class SentimentResult:
     dimension_scores: dict[str, float] = field(default_factory=dict)
     severity: str = "low"
     explanation: str = ""
+    extracted_events: tuple[ExtractedFinancialEvent, ...] = ()
+    category_scores: dict[str, float] = field(default_factory=dict)
+    source_reliability: float = 0.65
+    recency_weight: float = 1.0
+    adjusted_score: float | None = None
+    ml_score: float | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable representation."""
@@ -67,4 +75,10 @@ class SentimentResult:
             "dimension_scores": self.dimension_scores,
             "severity": self.severity,
             "explanation": self.explanation,
+            "extracted_events": [event.to_dict() for event in self.extracted_events],
+            "category_scores": self.category_scores,
+            "source_reliability": self.source_reliability,
+            "recency_weight": self.recency_weight,
+            "adjusted_score": self.adjusted_score if self.adjusted_score is not None else self.score,
+            "ml_score": self.ml_score,
         }

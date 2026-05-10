@@ -126,6 +126,20 @@ const sampleEvents = [
     text: "The Financial Stability Board warned that growing links between banks and private credit firms could amplify systemic financial risks.",
   },
   {
+    event_id: "evt-107",
+    counterparty: "HSBC",
+    source: "sec filing",
+    timestamp: "2026-05-06T12:00:00Z",
+    text: "HSBC disclosed a $400 million fraud loss exposure and a 12% liquidity squeeze after a covenant breach.",
+  },
+  {
+    event_id: "evt-108",
+    counterparty: "Omega Bank",
+    source: "reuters",
+    timestamp: "2026-05-06T12:30:00Z",
+    text: "Omega Bank denied fraud allegations and said no evidence of misconduct was found after an internal review.",
+  },
+  {
     event_id: "evt-001",
     counterparty: "Northwind Capital",
     source: "news",
@@ -151,10 +165,16 @@ const sampleEvents = [
 const input = document.querySelector("#event-input");
 const analyzeButton = document.querySelector("#analyze-button");
 const clearButton = document.querySelector("#clear-button");
+const simulateButton = document.querySelector("#simulate-button");
 const loadSampleButton = document.querySelector("#load-sample");
 const resultList = document.querySelector("#result-list");
 const resultCount = document.querySelector("#result-count");
 const summaryCards = document.querySelector("#summary-cards");
+const trendChart = document.querySelector("#trend-chart");
+const topCounterparties = document.querySelector("#top-counterparties");
+const riskBreakdown = document.querySelector("#risk-breakdown");
+const eventTimeline = document.querySelector("#event-timeline");
+let simulationTimer = null;
 
 function normalize(text) {
   return (text.toLowerCase().match(/[a-z][a-z\- ]*[a-z]|[a-z]/g) || [])
@@ -345,6 +365,7 @@ function averageDimension(results, dimension) {
 function renderResults(results) {
   resultCount.textContent = `${results.length} events`;
   renderSummary(results);
+  renderDashboard(results);
 
   if (!results.length) {
     resultList.className = "result-list empty-state";
@@ -354,6 +375,89 @@ function renderResults(results) {
 
   resultList.className = "result-list";
   resultList.innerHTML = results.map(renderResultCard).join("");
+}
+
+
+function renderDashboard(results) {
+  renderTrendChart(results);
+  renderTopCounterparties(results);
+  renderRiskBreakdown(results);
+  renderEventTimeline(results);
+}
+
+function renderTrendChart(results) {
+  if (!results.length) {
+    trendChart.innerHTML = '<p class="placeholder">暂无趋势数据</p>';
+    return;
+  }
+  const points = results.map((result, index) => {
+    const x = results.length === 1 ? 50 : (index / (results.length - 1)) * 100;
+    const y = 50 - result.score * 42;
+    return `${x.toFixed(2)},${y.toFixed(2)}`;
+  });
+  trendChart.innerHTML = `
+    <svg viewBox="0 0 100 100" role="img" aria-label="rolling risk trend">
+      <line x1="0" y1="50" x2="100" y2="50" class="axis"></line>
+      <polyline points="${points.join(" ")}" class="trend-line"></polyline>
+      ${points.map((point) => `<circle cx="${point.split(",")[0]}" cy="${point.split(",")[1]}" r="2.2"></circle>`).join("")}
+    </svg>
+  `;
+}
+
+function renderTopCounterparties(results) {
+  const grouped = results.reduce((items, result) => {
+    const key = result.event.counterparty;
+    if (!items[key]) items[key] = { count: 0, risk: 0 };
+    items[key].count += 1;
+    items[key].risk += Math.max(0, -result.score) + (result.severity === "high" ? 0.4 : result.severity === "medium" ? 0.2 : 0);
+    return items;
+  }, {});
+  const rows = Object.entries(grouped)
+    .map(([name, value]) => [name, value.risk / value.count, value.count])
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 5);
+  topCounterparties.innerHTML = rows.length
+    ? rows.map(([name, risk, count]) => `<div class="mini-row"><span>${escapeHtml(name)}</span><strong>${risk.toFixed(2)}</strong><small>${count} events</small></div>`).join("")
+    : '<p class="placeholder">暂无交易对手方</p>';
+}
+
+function renderRiskBreakdown(results) {
+  const counts = results.reduce((items, result) => {
+    result.riskFlags.forEach((flag) => {
+      items[flag] = (items[flag] || 0) + 1;
+    });
+    return items;
+  }, {});
+  const rows = Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  riskBreakdown.innerHTML = rows.length
+    ? rows.map(([flag, count]) => `<div class="mini-row"><span>${escapeHtml(flag)}</span><strong>${count}</strong></div>`).join("")
+    : '<p class="placeholder">暂无风险标签</p>';
+}
+
+function renderEventTimeline(results) {
+  const rows = [...results].slice(-6).reverse();
+  eventTimeline.innerHTML = rows.length
+    ? rows.map((result) => `<div class="timeline-item"><b class="severity-dot ${result.severity}"></b><span>${escapeHtml(result.event.counterparty)}</span><small>${escapeHtml(result.event.event_id || result.event.source || "event")}</small></div>`).join("")
+    : '<p class="placeholder">暂无事件</p>';
+}
+
+function toggleSimulation() {
+  if (simulationTimer) {
+    clearInterval(simulationTimer);
+    simulationTimer = null;
+    simulateButton.textContent = "模拟直播";
+    return;
+  }
+  simulateButton.textContent = "停止模拟";
+  let index = 0;
+  input.value = "";
+  renderResults([]);
+  simulationTimer = setInterval(() => {
+    input.value += `${JSON.stringify(sampleEvents[index % sampleEvents.length])}\n`;
+    analyzeInput();
+    index += 1;
+    if (index >= sampleEvents.length) toggleSimulation();
+  }, 700);
 }
 
 function renderResultCard(result) {
@@ -423,6 +527,7 @@ function analyzeInput() {
 loadSampleButton.addEventListener("click", loadSample);
 analyzeButton.addEventListener("click", analyzeInput);
 clearButton.addEventListener("click", () => renderResults([]));
+simulateButton.addEventListener("click", toggleSimulation);
 
 loadSample();
 analyzeInput();
